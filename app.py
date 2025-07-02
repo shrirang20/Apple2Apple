@@ -1,3 +1,5 @@
+# app.py (updated)
+
 import streamlit as st
 import pandas as pd
 from utils import compare_dataframes_by_groups
@@ -22,7 +24,7 @@ if file1 and file2:
         df2 = pd.read_csv(file2)
         
         # Check if required columns exist in both files
-        required_columns = ['dataset_id', 'tactic_id', 'recency_flag']
+        required_columns = ['dataset_id', 'tactic_id', 'recency_flag', 'dataset_nm', 'tactic_nm', 'channel_nm']
         missing_cols_df1 = [col for col in required_columns if col not in df1.columns]
         missing_cols_df2 = [col for col in required_columns if col not in df2.columns]
         
@@ -153,16 +155,16 @@ if file1 and file2:
                         if unmatched.get("only_in_group1"):
                             st.error("**❌ Tactic+Recency combinations only in File A (Removed):**")
                             unmatched_df = pd.DataFrame(unmatched["only_in_group1"])
-                            # Aggregate by tactic_id and recency_flag
-                            agg_df = unmatched_df.groupby(['tactic_id', 'recency_flag']).size().reset_index(name='count')
-                            st.dataframe(agg_df, use_container_width=True)
+                            # Display with additional info
+                            display_cols = ['dataset_nm', 'tactic_id', 'tactic_nm', 'channel_nm', 'recency_flag', 'count']
+                            st.dataframe(unmatched_df[display_cols], use_container_width=True)
                         
                         if unmatched.get("only_in_group2"):
                             st.success("**➕ Tactic+Recency combinations only in File B (Added):**")
                             unmatched_df = pd.DataFrame(unmatched["only_in_group2"])
-                            # Aggregate by tactic_id and recency_flag
-                            agg_df = unmatched_df.groupby(['tactic_id', 'recency_flag']).size().reset_index(name='count')
-                            st.dataframe(agg_df, use_container_width=True)
+                            # Display with additional info
+                            display_cols = ['dataset_nm', 'tactic_id', 'tactic_nm', 'channel_nm', 'recency_flag', 'count']
+                            st.dataframe(unmatched_df[display_cols], use_container_width=True)
                     
                     # Tactic+Recency level changes
                     if changes.get("tactic_recency_changes"):
@@ -172,16 +174,38 @@ if file1 and file2:
                             tactic_id, recency_flag = combo_key
                             # Handle NULL tactic_id display
                             display_tactic = "NULL" if tactic_id == 'NULL' else tactic_id
-                            st.warning(f"**🔄 Tactic {display_tactic}, Recency {recency_flag} - Modified**")
+                            
+                            # Display header with additional info
+                            st.warning(
+                                f"**🔄 Tactic {display_tactic} ({combo_change.get('tactic_nm', 'N/A')}), "
+                                f"Recency {recency_flag} - Modified**\n"
+                                f"**Dataset:** {combo_change.get('dataset_nm', 'N/A')} | "
+                                f"**Channel:** {combo_change.get('channel_nm', 'N/A')}"
+                            )
+                            
                             if combo_change.get("cell_changes"):
                                 cell_df = pd.DataFrame(combo_change["cell_changes"])
-                                st.dataframe(cell_df, use_container_width=True)
+                                # Reorder columns to show identifying info first
+                                col_order = [
+                                    'dataset_nm', 'tactic_id', 'tactic_nm', 'channel_nm', 'recency_flag',
+                                    'Column', 'File_A_Value', 'File_B_Value', 'Change_Type'
+                                ]
+                                # Only include columns that exist in the dataframe
+                                col_order = [col for col in col_order if col in cell_df.columns]
+                                st.dataframe(cell_df[col_order], use_container_width=True)
                     
                     # Overall cell changes for this group
                     if changes.get("cell_changes"):
                         st.write("**📋 All Cell Changes in Group:**")
                         cell_changes_df = pd.DataFrame(changes["cell_changes"])
-                        st.dataframe(cell_changes_df, use_container_width=True)
+                        # Reorder columns to show identifying info first
+                        col_order = [
+                            'dataset_nm', 'tactic_id', 'tactic_nm', 'channel_nm', 'recency_flag',
+                            'Column', 'File_A_Value', 'File_B_Value', 'Change_Type'
+                        ]
+                        # Only include columns that exist in the dataframe
+                        col_order = [col for col in col_order if col in cell_changes_df.columns]
+                        st.dataframe(cell_changes_df[col_order], use_container_width=True)
         
         # Identical groups
         if result["identical_groups"]:
@@ -209,7 +233,10 @@ if file1 and file2:
                 for (tactic_id, recency_flag), combo_change in changes["tactic_recency_changes"].items():
                     tactic_recency_summary.append({
                         "dataset_id": dataset_id,
+                        "dataset_nm": combo_change.get("dataset_nm", "N/A"),
                         "tactic_id": tactic_id if tactic_id != 'NULL' else None,
+                        "tactic_nm": combo_change.get("tactic_nm", "N/A"),
+                        "channel_nm": combo_change.get("channel_nm", "N/A"),
                         "recency_flag": recency_flag,
                         "change_type": "modified",
                         "cell_changes_count": len(combo_change.get("cell_changes", []))
@@ -221,7 +248,10 @@ if file1 and file2:
                 for combo in unmatched.get("only_in_group1", []):
                     unmatched_summary.append({
                         "dataset_id": dataset_id,
+                        "dataset_nm": combo.get("dataset_nm", "N/A"),
                         "tactic_id": combo["tactic_id"] if combo["tactic_id"] != 'NULL' else None,
+                        "tactic_nm": combo.get("tactic_nm", "N/A"),
+                        "channel_nm": combo.get("channel_nm", "N/A"),
                         "recency_flag": combo["recency_flag"],
                         "status": "only_in_file_a",
                         "change_type": "removed"
@@ -229,7 +259,10 @@ if file1 and file2:
                 for combo in unmatched.get("only_in_group2", []):
                     unmatched_summary.append({
                         "dataset_id": dataset_id,
+                        "dataset_nm": combo.get("dataset_nm", "N/A"),
                         "tactic_id": combo["tactic_id"] if combo["tactic_id"] != 'NULL' else None,
+                        "tactic_nm": combo.get("tactic_nm", "N/A"),
+                        "channel_nm": combo.get("channel_nm", "N/A"),
                         "recency_flag": combo["recency_flag"],
                         "status": "only_in_file_b",
                         "change_type": "added"
@@ -299,5 +332,5 @@ if file1 and file2:
         
     except Exception as e:
         st.error(f"❌ An error occurred: {str(e)}")
-        st.write("Please make sure both files are valid CSV files with 'dataset_id', 'tactic_id', and 'recency_flag' columns.")
+        st.write("Please make sure both files are valid CSV files with required columns.")
         st.exception(e)
