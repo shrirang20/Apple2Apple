@@ -6,8 +6,8 @@ def compare_dataframes_by_groups(df1, df2):
     """
     Compare two dataframes by grouping on 'dataset_id', then comparing 
     rows within each group based on matching 'tactic_id' AND 'recency_flag'.
-    Only compares rows where recency_flag = 'history' and ignores 'description' column.
-    Includes dataset_nm, tactic_nm and channel_nm in all difference displays.
+    Only compares rows where recency_flag = 'history' and ignores 'description' and 'timestamp' columns.
+    Includes dataset_nm, tactic_nm, channel_nm, min_dt and max_dt in all difference displays.
     """
     # Initialize validation messages
     validation_messages = []
@@ -24,7 +24,7 @@ def compare_dataframes_by_groups(df1, df2):
             validation_messages.append(f"⚠️ {file_name} contains {len(null_tactics)} rows with NULL tactic_id values")
     
     # Check for missing key columns
-    key_columns = ['tactic_id', 'tactic_nm', 'dataset_id', 'dataset_nm', 'channel_nm']
+    key_columns = ['tactic_id', 'tactic_nm', 'dataset_id', 'dataset_nm', 'channel_nm', 'min_dt', 'max_dt']
     for file_name, df in [("File A", df1), ("File B", df2)]:
         missing_cols = [col for col in key_columns if col not in df.columns]
         if missing_cols:
@@ -51,9 +51,11 @@ def compare_dataframes_by_groups(df1, df2):
     all_columns_df1 = set(df1.columns)
     all_columns_df2 = set(df2.columns)
     
-    # Remove 'description' from column differences since we're ignoring it
+    # Remove 'description' and 'timestamp' from column differences since we're ignoring them
     all_columns_df1.discard('description')
     all_columns_df2.discard('description')
+    all_columns_df1.discard('timestamp')
+    all_columns_df2.discard('timestamp')
     
     column_differences = {
         "only_in_df1": list(all_columns_df1 - all_columns_df2),
@@ -89,10 +91,11 @@ def compare_dataframes_by_groups(df1, df2):
 def compare_groups_by_tactic_recency(group1, group2, dataset_id, common_columns):
     """
     Compare two groups by matching rows with same tactic_id AND recency_flag.
-    Includes dataset_nm, tactic_nm and channel_nm in all difference displays.
+    Includes dataset_nm, tactic_nm, channel_nm, min_dt and max_dt in all difference displays.
+    Ignores 'description' and 'timestamp' columns in comparisons.
     """
-    # Remove 'description' from common_columns if present
-    common_columns = [col for col in common_columns if col != 'description']
+    # Remove 'description' and 'timestamp' from common_columns if present
+    common_columns = [col for col in common_columns if col not in ['description', 'timestamp']]
     
     # Reset indices and sort by tactic_id and recency_flag
     group1 = group1.sort_values(['tactic_id', 'recency_flag']).reset_index(drop=True)
@@ -141,6 +144,8 @@ def compare_groups_by_tactic_recency(group1, group2, dataset_id, common_columns)
                 "tactic_id": tactic_id if tactic_id != 'NULL' else None,
                 "tactic_nm": row.get('tactic_nm', 'N/A'),
                 "channel_nm": row.get('channel_nm', 'N/A'),
+                "min_dt": row.get('min_dt', 'N/A'),
+                "max_dt": row.get('max_dt', 'N/A'),
                 "recency_flag": recency_flag,
                 "count": 1
             }
@@ -160,6 +165,8 @@ def compare_groups_by_tactic_recency(group1, group2, dataset_id, common_columns)
                 "tactic_id": tactic_id if tactic_id != 'NULL' else None,
                 "tactic_nm": row.get('tactic_nm', 'N/A'),
                 "channel_nm": row.get('channel_nm', 'N/A'),
+                "min_dt": row.get('min_dt', 'N/A'),
+                "max_dt": row.get('max_dt', 'N/A'),
                 "recency_flag": recency_flag,
                 "count": 1
             }
@@ -184,11 +191,14 @@ def compare_groups_by_tactic_recency(group1, group2, dataset_id, common_columns)
         
         if combo_comparison["has_changes"]:
             has_changes = True
+            first_row = combo_rows_1.iloc[0]
             tactic_recency_changes[combo_key] = {
                 "cell_changes": combo_comparison["cell_changes"],
-                "dataset_nm": combo_rows_1.iloc[0].get('dataset_nm', 'N/A'),
-                "tactic_nm": combo_rows_1.iloc[0].get('tactic_nm', 'N/A'),
-                "channel_nm": combo_rows_1.iloc[0].get('channel_nm', 'N/A')
+                "dataset_nm": first_row.get('dataset_nm', 'N/A'),
+                "tactic_nm": first_row.get('tactic_nm', 'N/A'),
+                "channel_nm": first_row.get('channel_nm', 'N/A'),
+                "min_dt": first_row.get('min_dt', 'N/A'),
+                "max_dt": first_row.get('max_dt', 'N/A')
             }
             cell_changes.extend(combo_comparison["cell_changes"])
     
@@ -214,6 +224,7 @@ def compare_tactic_recency_combination(rows1, rows2, tactic_id, recency_flag, co
     """
     Compare rows with the same tactic_id and recency_flag combination.
     Includes additional identifying info in cell changes.
+    Ignores 'timestamp' column in comparisons.
     """
     cell_changes = []
     has_changes = False
@@ -226,6 +237,8 @@ def compare_tactic_recency_combination(rows1, rows2, tactic_id, recency_flag, co
     dataset_nm = rows1.iloc[0].get('dataset_nm', 'N/A')
     tactic_nm = rows1.iloc[0].get('tactic_nm', 'N/A')
     channel_nm = rows1.iloc[0].get('channel_nm', 'N/A')
+    min_dt = rows1.iloc[0].get('min_dt', 'N/A')
+    max_dt = rows1.iloc[0].get('max_dt', 'N/A')
     
     # Handle case where there are multiple rows with same combination
     min_rows = min(len(rows1), len(rows2))
@@ -237,8 +250,8 @@ def compare_tactic_recency_combination(rows1, rows2, tactic_id, recency_flag, co
         row2 = rows2.iloc[row_idx]
         
         for col in common_columns:
-            # Skip description column
-            if col == 'description':
+            # Skip timestamp column
+            if col == 'timestamp':
                 continue
                 
             val1 = row1[col]
@@ -257,6 +270,8 @@ def compare_tactic_recency_combination(rows1, rows2, tactic_id, recency_flag, co
                     "tactic_id": tactic_id,
                     "tactic_nm": tactic_nm,
                     "channel_nm": channel_nm,
+                    "min_dt": min_dt,
+                    "max_dt": max_dt,
                     "recency_flag": recency_flag,
                     "Row_Index": row_idx if max_rows > 1 else None,
                     "Column": col,
@@ -273,7 +288,7 @@ def compare_tactic_recency_combination(rows1, rows2, tactic_id, recency_flag, co
             for row_idx in range(min_rows, len(rows1)):
                 row1 = rows1.iloc[row_idx]
                 for col in common_columns:
-                    if col == 'description':
+                    if col in ['description', 'timestamp']:
                         continue
                     cell_changes.append({
                         "dataset_id": dataset_id,
@@ -281,6 +296,8 @@ def compare_tactic_recency_combination(rows1, rows2, tactic_id, recency_flag, co
                         "tactic_id": tactic_id,
                         "tactic_nm": tactic_nm,
                         "channel_nm": channel_nm,
+                        "min_dt": min_dt,
+                        "max_dt": max_dt,
                         "recency_flag": recency_flag,
                         "Row_Index": row_idx,
                         "Column": col,
@@ -293,7 +310,7 @@ def compare_tactic_recency_combination(rows1, rows2, tactic_id, recency_flag, co
             for row_idx in range(min_rows, len(rows2)):
                 row2 = rows2.iloc[row_idx]
                 for col in common_columns:
-                    if col == 'description':
+                    if col in ['description', 'timestamp']:
                         continue
                     cell_changes.append({
                         "dataset_id": dataset_id,
@@ -301,6 +318,8 @@ def compare_tactic_recency_combination(rows1, rows2, tactic_id, recency_flag, co
                         "tactic_id": tactic_id,
                         "tactic_nm": tactic_nm,
                         "channel_nm": channel_nm,
+                        "min_dt": min_dt,
+                        "max_dt": max_dt,
                         "recency_flag": recency_flag,
                         "Row_Index": row_idx,
                         "Column": col,

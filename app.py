@@ -1,5 +1,3 @@
-# app.py (updated)
-
 import streamlit as st
 import pandas as pd
 from utils import compare_dataframes_by_groups
@@ -10,8 +8,7 @@ st.title("🔍 CSV Apple-to-Apple Comparison Tool (History Only)")
 st.markdown("""
 Upload two CSV files to compare by dataset_id groups, tactic_id rows, and recency_flag matching. 
 **Only rows with recency_flag = 'history' will be compared.** 
-**The 'description' column is ignored in comparisons.**
-For timestamps in format 'YYYY-MM-DD HH:MM:SS.ffffff+00:00', only the date part is compared.
+**The 'description' and 'timestamp' columns are ignored in comparisons.**
 NULL/empty tactic_id values are treated as equal.
 """)
 
@@ -24,7 +21,8 @@ if file1 and file2:
         df2 = pd.read_csv(file2)
         
         # Check if required columns exist in both files
-        required_columns = ['dataset_id', 'tactic_id', 'recency_flag', 'dataset_nm', 'tactic_nm', 'channel_nm']
+        required_columns = ['dataset_id', 'tactic_id', 'recency_flag', 'dataset_nm', 
+                          'tactic_nm', 'channel_nm', 'min_dt', 'max_dt']
         missing_cols_df1 = [col for col in required_columns if col not in df1.columns]
         missing_cols_df2 = [col for col in required_columns if col not in df2.columns]
         
@@ -61,7 +59,7 @@ if file1 and file2:
             st.write(df2['recency_flag'].value_counts().to_dict())
         
         # Perform comparison
-        with st.spinner("Comparing history rows by dataset_id groups and tactic_id rows (ignoring description column)..."):
+        with st.spinner("Comparing history rows by dataset_id groups and tactic_id rows (ignoring description and timestamp columns)..."):
             result = compare_dataframes_by_groups(df1.copy(), df2.copy())
         
         # Display validation messages if any
@@ -156,14 +154,16 @@ if file1 and file2:
                             st.error("**❌ Tactic+Recency combinations only in File A (Removed):**")
                             unmatched_df = pd.DataFrame(unmatched["only_in_group1"])
                             # Display with additional info
-                            display_cols = ['dataset_nm', 'tactic_id', 'tactic_nm', 'channel_nm', 'recency_flag', 'count']
+                            display_cols = ['dataset_nm', 'tactic_id', 'tactic_nm', 'channel_nm', 
+                                          'min_dt', 'max_dt', 'recency_flag', 'count']
                             st.dataframe(unmatched_df[display_cols], use_container_width=True)
                         
                         if unmatched.get("only_in_group2"):
                             st.success("**➕ Tactic+Recency combinations only in File B (Added):**")
                             unmatched_df = pd.DataFrame(unmatched["only_in_group2"])
                             # Display with additional info
-                            display_cols = ['dataset_nm', 'tactic_id', 'tactic_nm', 'channel_nm', 'recency_flag', 'count']
+                            display_cols = ['dataset_nm', 'tactic_id', 'tactic_nm', 'channel_nm', 
+                                          'min_dt', 'max_dt', 'recency_flag', 'count']
                             st.dataframe(unmatched_df[display_cols], use_container_width=True)
                     
                     # Tactic+Recency level changes
@@ -180,14 +180,16 @@ if file1 and file2:
                                 f"**🔄 Tactic {display_tactic} ({combo_change.get('tactic_nm', 'N/A')}), "
                                 f"Recency {recency_flag} - Modified**\n"
                                 f"**Dataset:** {combo_change.get('dataset_nm', 'N/A')} | "
-                                f"**Channel:** {combo_change.get('channel_nm', 'N/A')}"
+                                f"**Channel:** {combo_change.get('channel_nm', 'N/A')}\n"
+                                f"**Date Range:** {combo_change.get('min_dt', 'N/A')} to {combo_change.get('max_dt', 'N/A')}"
                             )
                             
                             if combo_change.get("cell_changes"):
                                 cell_df = pd.DataFrame(combo_change["cell_changes"])
                                 # Reorder columns to show identifying info first
                                 col_order = [
-                                    'dataset_nm', 'tactic_id', 'tactic_nm', 'channel_nm', 'recency_flag',
+                                    'dataset_nm', 'tactic_id', 'tactic_nm', 'channel_nm',
+                                    'min_dt', 'max_dt', 'recency_flag',
                                     'Column', 'File_A_Value', 'File_B_Value', 'Change_Type'
                                 ]
                                 # Only include columns that exist in the dataframe
@@ -200,7 +202,8 @@ if file1 and file2:
                         cell_changes_df = pd.DataFrame(changes["cell_changes"])
                         # Reorder columns to show identifying info first
                         col_order = [
-                            'dataset_nm', 'tactic_id', 'tactic_nm', 'channel_nm', 'recency_flag',
+                            'dataset_nm', 'tactic_id', 'tactic_nm', 'channel_nm',
+                            'min_dt', 'max_dt', 'recency_flag',
                             'Column', 'File_A_Value', 'File_B_Value', 'Change_Type'
                         ]
                         # Only include columns that exist in the dataframe
@@ -237,6 +240,8 @@ if file1 and file2:
                         "tactic_id": tactic_id if tactic_id != 'NULL' else None,
                         "tactic_nm": combo_change.get("tactic_nm", "N/A"),
                         "channel_nm": combo_change.get("channel_nm", "N/A"),
+                        "min_dt": combo_change.get("min_dt", "N/A"),
+                        "max_dt": combo_change.get("max_dt", "N/A"),
                         "recency_flag": recency_flag,
                         "change_type": "modified",
                         "cell_changes_count": len(combo_change.get("cell_changes", []))
@@ -252,6 +257,8 @@ if file1 and file2:
                         "tactic_id": combo["tactic_id"] if combo["tactic_id"] != 'NULL' else None,
                         "tactic_nm": combo.get("tactic_nm", "N/A"),
                         "channel_nm": combo.get("channel_nm", "N/A"),
+                        "min_dt": combo.get("min_dt", "N/A"),
+                        "max_dt": combo.get("max_dt", "N/A"),
                         "recency_flag": combo["recency_flag"],
                         "status": "only_in_file_a",
                         "change_type": "removed"
@@ -263,6 +270,8 @@ if file1 and file2:
                         "tactic_id": combo["tactic_id"] if combo["tactic_id"] != 'NULL' else None,
                         "tactic_nm": combo.get("tactic_nm", "N/A"),
                         "channel_nm": combo.get("channel_nm", "N/A"),
+                        "min_dt": combo.get("min_dt", "N/A"),
+                        "max_dt": combo.get("max_dt", "N/A"),
                         "recency_flag": combo["recency_flag"],
                         "status": "only_in_file_b",
                         "change_type": "added"
